@@ -60,7 +60,7 @@ def FindOpeningBrackets (file): # add a line of logs after every "{"
                 idxList.append(idx)
     return idxList
 
-def InsertInstrumentation (file, idx, lineInserted, logLevel):
+def InsertBlindCaneLog (file, idx, lineInserted, logLevel):
     file.insert(idx+lineInserted[0]+1, 'blindCaneLogger.'+logLevel+'() << __FILE__ << ":'+ str(idx+1) + ' in " << __FUNCTION__;\n' )
     lineInserted[0] += 1
 
@@ -79,20 +79,42 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser(description='Generate')
     parser.add_argument('--files',dest='files', nargs='+', action='store',default=None, help='The source code file(s) you want to add instrumented outputs')
     parser.add_argument('--log-level',dest='logLevel',action='store',default=None,help='The log level for instrumented outputs: debug,info,warn,error')  
+    parser.add_argument('--start-line',dest='startLine',action='store',default=1,help='The line number that you want to start adding Blind Cane logs. If not specified, default is the beginning of the file')  
+    parser.add_argument('--end-line',dest='endLine',action='store',default=None,help='The line number that you want to stop adding Blind Cane logs. If not specified, default is the end of the file.')  
     
+
     args=parser.parse_args()
     fileList = args.files
     logLevel = args.logLevel
+    startLine = int(args.startLine) -1 # the lineList starts from 0, but human count start from 1
+    if args.endLine is not None:
+        endLine = int(args.endLine) -1
+    else:
+        endLine = args.endLine
+
     if not (logLevel=="debug" or logLevel=="info" or logLevel=="warn" or logLevel=="error"):
-        print "Invalid log-level value. Please input one of below:"
+        print "Error: Invalid log-level value. Please input one of below:"
         print "debug,info,warn,error"
+        exit()
+    if startLine < 0:
+        print "Error: Invalid start-line, please input number larger than 1"
+        exit()
+    
+    if endLine < 0 and endLine != None:  # none is the implicit default
+        print "Error: Invalid end-line, please input number larger than 1"
+        exit()
+    if endLine < startLine and endLine != None: # none is the implicit default
+        print "Error: end-line must greater/equal to start-line"
         exit()
 
     for file in fileList:
+        BackupFile(file)
         lineInserted = [0]   # using list type is stupid, but integer is not mutable data type, but list is https://stackoverflow.com/questions/15148496/passing-an-integer-by-reference-in-python
         fr = open(file, 'r')
         contents = fr.readlines()
         fr.close()
+        if endLine is None:
+            endLine = len(contents) - 1
         idxList = FindOpeningBrackets(contents)
 
         if not IsLoggerDotHIncluded(contents):
@@ -102,7 +124,8 @@ if __name__ == '__main__':
         lineInserted[0] += 1
         
         for idx in idxList:
-            InsertInstrumentation(contents,idx,lineInserted, logLevel)   
+            if idx <= endLine and idx >= startLine:
+                InsertBlindCaneLog(contents,idx,lineInserted, logLevel)   
 
         contents = "".join(contents)
         fw = open(file, 'w')        
